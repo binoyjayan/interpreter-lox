@@ -57,7 +57,6 @@ pub fn run_file(filename: &str) {
 }
 
 pub fn run(source: String) {
-    println!("Source: {}", source);
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
 

@@ -1,4 +1,29 @@
 pub use crate::token::*;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+
+lazy_static! {
+    static ref KEYWORDS: HashMap<String, TokenType> = {
+        let mut m = HashMap::new();
+        m.insert("and".into(), TokenType::And);
+        m.insert("class".into(), TokenType::Class);
+        m.insert("else".into(), TokenType::Else);
+        m.insert("false".into(), TokenType::False);
+        m.insert("for".into(), TokenType::For);
+        m.insert("fun".into(), TokenType::Fun);
+        m.insert("if".into(), TokenType::If);
+        m.insert("nil".into(), TokenType::Nil);
+        m.insert("or".into(), TokenType::Or);
+        m.insert("print".into(), TokenType::Print);
+        m.insert("return".into(), TokenType::Return);
+        m.insert("super".into(), TokenType::Super);
+        m.insert("this".into(), TokenType::This);
+        m.insert("true".into(), TokenType::True);
+        m.insert("var".into(), TokenType::Var);
+        m.insert("while".into(), TokenType::While);
+        m
+    };
+}
 
 pub struct Scanner {
     source: Vec<char>,
@@ -38,7 +63,6 @@ impl Scanner {
             '-'  => self.add_token(TokenType::Minus, None),
             '+'  => self.add_token(TokenType::Plus, None),
             ';'  => self.add_token(TokenType::Semicolon, None),
-            '/'  => self.add_token(TokenType::Slash, None),
             '*'  => self.add_token(TokenType::Star, None),
             '!'  => self.add_token_twin('=', TokenType::BangEqual, TokenType::Bang),
             '='  => self.add_token_twin('=', TokenType::EqualEqual, TokenType::Equal),
@@ -51,7 +75,7 @@ impl Scanner {
                 self.col = 0;
             }
             '"' => self.handle_string(),
-            _ => println!("Unknown token {}", c)
+            _ => self.handle_longer_lexemes(c),
         }
     }
 
@@ -62,6 +86,8 @@ impl Scanner {
             self.scan_token();
         }
     
+        self.start = self.current;
+
         self.add_token(TokenType::Eof, None);
         &self.tokens
     }
@@ -85,7 +111,8 @@ impl Scanner {
             }
         );
     }
-    // Process two character tokens [ == != ]
+
+    // Add two character tokens [ == != ]
     fn add_token_twin(&mut self, next: char, twin_type: TokenType, single_type: TokenType) {
         let matches_second = self.matches(next);
         self.add_token(if matches_second { twin_type } else { single_type }, None);
@@ -120,6 +147,51 @@ impl Scanner {
         self.add_token(TokenType::StringLiteral, Some(Literal::Str(s)))
     }
 
+    fn handle_longer_lexemes(&mut self, c: char) {
+        if c.is_digit(10) {
+            self.handle_number()
+        } else if Self::is_alphabetic(c) {
+            self.handle_identifier()
+        } else {
+            println!("scanner can't handle {}", c)
+        }
+    }
+
+    fn handle_number(&mut self) {
+        while self.peek().is_digit(10) {
+            self.advance();
+        }
+
+        // Look for a fractional part
+        if self.peek() == '.' && self.peek_next().is_digit(10) {
+            // Consume the "."
+            self.advance();
+        }
+
+        while self.peek().is_digit(10) {
+            self.advance();
+        }
+
+        let s:String = self.source[self.start..self.current].iter().collect();
+        let val: f64 = s.parse().unwrap();
+        self.add_token(TokenType::Number, Some(Literal::Number(val)))
+    }
+
+    fn handle_identifier(&mut self) {
+        while Self::is_alphanumeric(self.peek()) {
+            self.advance();
+        }
+
+        let val: String = self.source[self.start..self.current].iter().collect();
+
+        let (ttype, literal) = match KEYWORDS.get(&val) {
+            Some(kw_ttype) => (*kw_ttype, None),
+            None => (TokenType::Identifier, Some(Literal::Identifier(val)))
+        };
+
+        self.add_token(ttype, literal)
+    }
+
     fn matches(&mut self, expected: char) -> bool {
         if self.is_at_end() {
             return false;
@@ -150,4 +222,11 @@ impl Scanner {
         }
     }
 
+    fn is_alphabetic(c: char) -> bool {
+        c.is_alphabetic() || c == '_'
+    }
+
+    fn is_alphanumeric(c: char) -> bool {
+        c.is_alphanumeric() || c == '_'
+    }
 }
