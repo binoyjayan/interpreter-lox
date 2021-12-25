@@ -22,14 +22,25 @@ pub enum TokenType {
     Eof,
  }
 
- #[derive(Debug, Clone)]
+ #[derive(Debug, Clone, PartialEq)]
  pub enum Literal {
      Identifier(String),
      Str(String),
      Number(f64),
  }
+
+ impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Identifier(s) => write!(f, "{}", s),
+            Self::Str(s) => write!(f, "{}", s),
+            Self::Number(n) => write!(f, "{}", n),
+        }
+    }
+}
+
  
- #[derive(Clone)]
+ #[derive(Clone, PartialEq)]
  pub struct Token {
      pub ttype: TokenType,
      pub lexeme: String,

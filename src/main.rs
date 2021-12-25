@@ -1,7 +1,9 @@
 use std::{env};
 
 mod scanner;
+mod value;
 mod token;
+mod expr;
 
 use scanner::Scanner;
 

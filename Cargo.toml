@@ -3,6 +3,7 @@ name = "interpreter-lox"
 version = "0.1.0"
 authors = ["Binoy Jayan <binoyjayan@gmail.com>"]
 edition = "2018"
+default-run = "interpreter-lox"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
