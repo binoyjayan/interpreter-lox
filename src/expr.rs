@@ -109,7 +109,7 @@ mod tests {
         // (* (- 123) (group 45.67))
         let binary: Expression = Expression::Binary(Box::new(Expression::Unary(Token {ttype:TokenType::Minus, lexeme: "-".into(), literal:None, line:1, col:5},
                                                                                Box::new(Expression::LiteralExpression(Literal::Number(123.))))),
-                                                    Token {ttype:TokenType::Star, lexeme: "*".into(), literal:None, line:1, col:2},
+                                                    Token {ttype: TokenType::Star, lexeme: "*".into(), literal:None, line:1, col:2},
                                                     Box::new(Expression::Grouping(Box::new(Expression::LiteralExpression(Literal::Number(45.67))))));
         
         let mut astprinter: AstPrinter = AstPrinter::default();

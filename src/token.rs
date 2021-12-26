@@ -27,6 +27,8 @@ pub enum TokenType {
      Identifier(String),
      Str(String),
      Number(f64),
+     Bool(bool),
+     Nil,
  }
 
  impl fmt::Display for Literal {
@@ -35,6 +37,8 @@ pub enum TokenType {
             Self::Identifier(s) => write!(f, "{}", s),
             Self::Str(s) => write!(f, "{}", s),
             Self::Number(n) => write!(f, "{}", n),
+            Self::Bool(b) => write!(f, "{}", b),
+            Self::Nil => write!(f, "nil"),
         }
     }
 }

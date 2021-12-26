@@ -1,25 +1,15 @@
 use std::{env};
+use std::sync::atomic;
 
-mod scanner;
-mod value;
-mod token;
 mod expr;
+mod token;
+mod parser;
+mod scanner;
 
 use scanner::Scanner;
+use token::{Token, TokenType};
 
-// struct Lox {
-//     had_error: bool,
-// }
-
-// pub fn error(line: i32, message: String) {
-//     println!("{} {}", line, message);
-// }
-
-// fn report(line: i32, wh: String, message: String) {
-//     println!("[line {} Error {}: {} ", line, wh, message);
-// }
-
-//static had_error:bool = false;
+static HAD_ERROR: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -68,3 +58,27 @@ pub fn run(source: String) {
 
 }
 
+pub fn error(line: usize, col: usize, message: &str) {
+    report(line, col, "", message);
+}
+
+pub fn error_at_token(token: &Token, message: &str) {
+    if token.ttype == TokenType::Eof {
+        report(token.line, token.col, " at end", message);
+    } else {
+        report(token.line, token.col, &format!(" at '{}'", token.lexeme), message);
+    }
+}
+
+fn report(line: usize, col:usize, lexeme: &str, message: &str) {
+    println!("[line {} col {}] Error{}: {}", line, col, lexeme, message);
+    set_had_error(true);
+}
+
+fn had_error() -> bool {
+    HAD_ERROR.load(atomic::Ordering::Relaxed)
+}
+
+fn set_had_error(b: bool) {
+    HAD_ERROR.store(b, atomic::Ordering::Relaxed)
+}
