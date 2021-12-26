@@ -13,31 +13,31 @@ impl AstPrinter {
 }
 
 impl ExpressionVisitor<String> for AstPrinter {
-    fn execute_assign_expression(&mut self, name: Token, value: Box<Expression>) -> String {
+    fn eval_assign(&mut self, name: Token, value: Box<Expression>) -> String {
         format!("{} = {}", name.lexeme, self.evaluate(*value)).into()
     }
 
-    fn execute_binary_expression(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> String {
+    fn eval_binary(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> String {
         format!("({} {} {})", self.evaluate(*left), operator.lexeme, self.evaluate(*right))
     }
 
-    fn execute_grouping_expression(&mut self, expr: Box<Expression>) -> String {
+    fn eval_grouping(&mut self, expr: Box<Expression>) -> String {
         format!("(group {})", self.evaluate(*expr))
     }
 
-    fn execute_literal_expression(&mut self, literal: Literal) -> String {
+    fn eval_literal(&mut self, literal: Literal) -> String {
         format!("{}", literal)
     }
 
-    fn execute_logical_expression(&mut self, _left: Box<Expression>, _operator: Token, _right: Box<Expression>) -> String {
-        "".into()
+    fn eval_logical(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> String {
+        format!("({} {} {})", self.evaluate(*left), operator.lexeme, self.evaluate(*right))
     }
 
-    fn execute_unary_expression(&mut self, operator: Token, value: Box<Expression>) -> String {
+    fn eval_unary(&mut self, operator: Token, value: Box<Expression>) -> String {
         format!("({} {})", operator.lexeme, self.evaluate(*value))
     }
 
-    fn execute_variable_expression(&self, _expr: Token) -> String {
+    fn eval_variable(&self, _expr: Token) -> String {
         "".into()
     }
 }
@@ -46,14 +46,26 @@ impl ExpressionVisitor<String> for AstPrinter {
 mod tests {
     use super::*;
     #[test]
-    fn ast_printer() {
-        // (* (- 123) (group 45.67))
-        let binary: Expression = Expression::Binary(Box::new(Expression::Unary(Token {ttype: TokenType::Minus, lexeme: "-".into(), literal:None, line:1, col:5},
+    fn ast_test1() {
+        //-123 * (45.67)   -->>    (* (- 123) (group 45.67))
+        let binary: Expression = Expression::Binary(Box::new(Expression::Unary(Token {ttype: TokenType::Minus, lexeme: "-".into(), literal:None, line: 1, col: 1},
                                                                                Box::new(Expression::LiteralExpression(Literal::Number(123.))))),
-                                                    Token {ttype: TokenType::Star, lexeme: "*".into(), literal:None, line:1, col:2},
+                                                    Token {ttype: TokenType::Star, lexeme: "*".into(), literal: None, line: 1, col: 6},
                                                     Box::new(Expression::Grouping(Box::new(Expression::LiteralExpression(Literal::Number(45.67))))));
         let result = AstPrinter::default().print(binary);
         // println!("Result: {}", result);
         assert_eq!(result, "((- 123) * (group 45.67))")
+    }
+
+    #[test]
+    fn ast_test2() {
+        //-11.22 == (11.22)   -->>     (== (- 11.22) (group 11.22))
+        let binary: Expression = Expression::Binary(Box::new(Expression::Unary(Token {ttype: TokenType::Minus, lexeme: "-".into(), literal:None, line: 2, col: 1},
+                                                                               Box::new(Expression::LiteralExpression(Literal::Number(11.22))))),
+                                                    Token {ttype: TokenType::EqualEqual, lexeme: "==".into(), literal: None, line: 2, col: 6},
+                                                    Box::new(Expression::Grouping(Box::new(Expression::LiteralExpression(Literal::Number(11.22))))));
+        let result = AstPrinter::default().print(binary);
+        // println!("Result: {}", result);
+        assert_eq!(result, "((- 11.22) == (group 11.22))")
     }
 }

@@ -15,22 +15,22 @@ pub enum Expression {
 pub trait ExpressionVisitor<T> {
     fn evaluate(&mut self, expression: Expression) -> T {
         match expression {
-            Expression::Assign(name, value) => self.execute_assign_expression(name, value),
-            Expression::Binary(b, o, b2) => self.execute_binary_expression(b, o, b2),
-            Expression::Grouping(g) => self.execute_grouping_expression(g),
-            Expression::LiteralExpression(l) => self.execute_literal_expression(l),
-            Expression::Unary(operator, right) => self.execute_unary_expression(operator, right),
-            Expression::Variable(v) => self.execute_variable_expression(v),
-            Expression::LogicalExpression(left, operator, right) => self.execute_logical_expression(left, operator, right),
+            Expression::Assign(name, value) => self.eval_assign(name, value),
+            Expression::Binary(b1, o, b2) => self.eval_binary(b1, o, b2),
+            Expression::Grouping(g) => self.eval_grouping(g),
+            Expression::LiteralExpression(l) => self.eval_literal(l),
+            Expression::Unary(operator, right) => self.eval_unary(operator, right),
+            Expression::Variable(v) => self.eval_variable(v),
+            Expression::LogicalExpression(left, operator, right) => self.eval_logical(left, operator, right),
         }
     }
-    fn execute_assign_expression(&mut self, name: Token, value: Box<Expression>) -> T;
-    fn execute_binary_expression(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> T;
-    fn execute_grouping_expression(&mut self, expression: Box<Expression>) -> T;
-    fn execute_literal_expression(&mut self, literal: Literal) -> T;
-    fn execute_logical_expression(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> T;
-    fn execute_unary_expression(&mut self, operator: Token, value: Box<Expression>) -> T;
-    fn execute_variable_expression(&self, expression: Token) -> T;
+    fn eval_assign(&mut self, name: Token, value: Box<Expression>) -> T;
+    fn eval_binary(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> T;
+    fn eval_grouping(&mut self, expression: Box<Expression>) -> T;
+    fn eval_literal(&mut self, literal: Literal) -> T;
+    fn eval_logical(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> T;
+    fn eval_unary(&mut self, operator: Token, value: Box<Expression>) -> T;
+    fn eval_variable(&self, expression: Token) -> T;
 }
 
 #[allow(dead_code)]
@@ -48,21 +48,21 @@ pub trait StatementVisitor<T> {
     fn execute(&mut self, statement: Statement) -> T {
         match statement {
             Statement::If(condition, then_branch, else_branch) => {
-                self.execute_if_statement(condition, then_branch, else_branch)
+                self.exec_if_stmt(condition, then_branch, else_branch)
             }
-            Statement::Block(statements) => self.execute_block_statement(statements),
-            Statement::Expression(statement) => self.execute_expression_statement(statement),
-            Statement::Print(statement) => self.execute_print_statement(statement),
-            Statement::Var(name, initializer) => self.execute_var_statement(name, initializer),
-            Statement::While(condition, body) => self.execute_while_statement(condition, body),
+            Statement::Block(statements) => self.exec_block(statements),
+            Statement::Expression(statement) => self.exec_expr(statement),
+            Statement::Print(statement) => self.exec_print(statement),
+            Statement::Var(name, initializer) => self.exec_var(name, initializer),
+            Statement::While(condition, body) => self.exec_while(condition, body),
         }
     }
-    fn execute_if_statement(&mut self, condition: Expression,
+    fn exec_if_stmt(&mut self, condition: Expression,
                             then_branch: Box<Statement>,
                             else_branch: Box<Option<Statement>>) -> T;
-    fn execute_block_statement(&mut self, statements: Vec<Statement>) -> T;
-    fn execute_expression_statement(&mut self, statement: Expression) -> T;
-    fn execute_print_statement(&mut self, statement: Expression) -> T;
-    fn execute_var_statement(&mut self, name: Token, initializer: Option<Expression>) -> T;
-    fn execute_while_statement(&mut self, condition: Expression, body: Box<Statement>) -> T;
+    fn exec_block(&mut self, statements: Vec<Statement>) -> T;
+    fn exec_expr(&mut self, statement: Expression) -> T;
+    fn exec_print(&mut self, statement: Expression) -> T;
+    fn exec_var(&mut self, name: Token, initializer: Option<Expression>) -> T;
+    fn exec_while(&mut self, condition: Expression, body: Box<Statement>) -> T;
 }

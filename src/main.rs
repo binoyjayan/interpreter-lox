@@ -3,14 +3,17 @@ use std::sync::atomic;
 
 mod expr;
 mod token;
+mod value;
 mod parser;
 mod scanner;
+mod interpreter;
 mod ast_printer;
 
 use parser::Parser;
 use scanner::Scanner;
-use ast_printer::AstPrinter;
 use token::{Token, TokenType};
+
+use crate::interpreter::Interpreter;
 
 static HAD_ERROR: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
@@ -42,7 +45,6 @@ pub fn run_prompt() {
 }
 
 pub fn run_file(filename: &str) {
-    println!("file: {}", filename);
     match std::fs::read_to_string(filename) {
         Ok(v) => run(v),
         Err(e) => return {
@@ -62,7 +64,7 @@ pub fn run(source: String) {
     // print_tokens(&tokens);
     let expressions = Parser::new(tokens).parse();
     for expr in expressions {
-        let result = AstPrinter::default().print(expr);
+        let result = Interpreter::default().interpret(expr);
         println!("Result: {}", result);
     }
 }
