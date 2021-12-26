@@ -37,9 +37,12 @@ impl Parser {
         Self { tokens, current: 0}
     }
 
-    pub fn parse(&mut self) -> Vec<Statement> {
-        let mut statements = Vec::new();
-        statements
+    pub fn parse(&mut self) -> Vec<Expression> {
+        let mut expression = Vec::new();
+        if let Ok(expr) = self.expression() {
+            expression.push(expr);
+        }
+        expression
     }
 
     // The first rule, expression, simply expands to the assignment rule
@@ -108,11 +111,10 @@ impl Parser {
     // If encountered a unary operator, recursively call unary 
     // recursively again to parse the expression.
     fn unary(&mut self) -> Result<Expression> {
-        let mut expr = self.primary()?;
         if self.matches(&[TokenType::Bang, TokenType::Minus]) {
             let operator = self.previous();
             let right = self.unary()?;
-            expr = Expression::Unary(operator, Box::new(right));
+            return Ok(Expression::Unary(operator, Box::new(right)))
         }
         self.primary()
     }
@@ -143,10 +145,38 @@ impl Parser {
             self.consume(&TokenType::RightParen, "Expect `)` after expression")?;
             return Ok(Expression::Grouping(Box::new(expr)));
         }
+        // Encountered a token that can’t start an expression.
         crate::error_at_token(&self.peek(), "Expect expression");
         Err(anyhow!("Parse error"))
     }
-    
+
+    // Synchronize the recursive descent parser by discarding
+    // token right until the beginning of the next statement
+    // i.e. when a semicolon or any of the special keywords is seen.
+
+    fn synchronize(&mut self) {
+        self.advance();
+        while !self.is_at_end() {
+            if self.previous().ttype == TokenType::Semicolon {
+                return;
+            }
+            match self.peek().ttype {
+                TokenType::Class | 
+                TokenType::Fun | 
+                TokenType::Var |
+                TokenType::For |
+                TokenType::If |
+                TokenType::While |
+                TokenType::Print |
+                TokenType::Return => {
+                    return;
+                }
+                _ => {}
+            }
+            self.advance();
+        }
+    }
+
     // Check to see if the current token has any of the given types.
     // If so, consume the token and return true
     fn matches(&mut self, types: &[TokenType]) -> bool {

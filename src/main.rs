@@ -5,8 +5,11 @@ mod expr;
 mod token;
 mod parser;
 mod scanner;
+mod ast_printer;
 
+use parser::Parser;
 use scanner::Scanner;
+use ast_printer::AstPrinter;
 use token::{Token, TokenType};
 
 static HAD_ERROR: atomic::AtomicBool = atomic::AtomicBool::new(false);
@@ -47,15 +50,21 @@ pub fn run_file(filename: &str) {
         },
     }
 }
+pub fn print_tokens(tokens: &Vec<Token>) {
+    for token in tokens {
+        println!("{:?}", token);
+    }
+}
 
 pub fn run(source: String) {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
-
-    for token in tokens {
-        println!("{:?}", token);
+    // print_tokens(&tokens);
+    let expressions = Parser::new(tokens).parse();
+    for expr in expressions {
+        let result = AstPrinter::default().print(expr);
+        println!("Result: {}", result);
     }
-
 }
 
 pub fn error(line: usize, col: usize, message: &str) {
