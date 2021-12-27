@@ -1,5 +1,5 @@
 // The AST Tree-walk Interpreter
-use anyhow::Result;
+use anyhow::{anyhow,Result};
 
 use crate::value::Value;
 use crate::environment::Environment;
@@ -22,7 +22,7 @@ impl Interpreter {
         for statement in statements {
             // Catch runtime errors and display them
             if let Err(e) = self.execute(statement) {
-                println!("Runtime error: {}", e)
+                return Err(anyhow!(format!("Runtime: {}", e)));
             }
         }
         Ok(())
@@ -51,17 +51,41 @@ impl Interpreter {
             _ => false,
         }
     }
+
+    // To execute a block, create a new environment for the block’s
+    // scope and pass it off to this other method
+    fn execute_block(&mut self, statements: &[Statement]) -> Result<Value> {
+        // The environment field in 'self' keeps changing when the scope changes.
+        // It represents the current environment. That’s the environment that
+        // corresponds to the innermost scope containing the code to be executed.
+        let previous = self.environment.clone();
+        self.environment = Environment::new_from(self.environment.clone());
+        for statement in statements {
+            self.execute(statement.clone())?;
+        }
+        // restores the previous value while exiting the scope or
+        // if any of the statements in the block results in an error
+        self.environment = previous;
+        Ok(Value::Nil)
+    }
 }
 
 impl StatementVisitor<Value> for Interpreter {
     fn exec_if_stmt(&mut self, condition: Expression,
                     then_branch: Box<Statement>,
                     else_branch: Box<Option<Statement>>) -> Result<Value> {
+        // If truthy, it executes the then branch. Otherwise,
+        // if there is an else branch, then execute that.
+        if Self::is_truthy(&self.evaluate(condition)?) {
+            self.execute(*then_branch)?;
+        } else if let Some(else_branch) = *else_branch {
+            self.execute(else_branch)?;
+        }
         Ok(Value::Nil)
     }
 
     fn exec_block(&mut self, statements: Vec<Statement>) -> Result<Value> {
-        Ok(Value::Nil)
+        self.execute_block(&statements)
     }
 
     fn exec_expr(&mut self, statement: Expression) -> Result<Value> {
@@ -92,7 +116,9 @@ impl StatementVisitor<Value> for Interpreter {
 
 impl ExpressionVisitor<Value> for Interpreter {
     fn eval_assign(&mut self, name: Token, value: Box<Expression>) -> Result<Value> {
-        Ok(Value::Number(111.222))
+        let value = self.evaluate(*value)?;
+        self.environment.put(name, value.clone())?;
+        Ok(value.into())
     }
 
     // Evaluate left and right subexpressions first and then perform arithmetic,
@@ -211,7 +237,8 @@ impl ExpressionVisitor<Value> for Interpreter {
         }
     }
 
-    // Evaluate a variable expression
+    // Evaluate a variable expression. Produce a runtime error
+    // when an undefined variable is used.
     fn eval_variable(&self, expr: Token) -> Result<Value> {
         self.environment.get(&expr)
     }
@@ -221,24 +248,26 @@ impl ExpressionVisitor<Value> for Interpreter {
 mod tests {
     use super::*;
     #[test]
-    fn ast_test1() {
+    fn ast_test1() -> Result<()>  {
         //-12.34 + (56.78)   --->> 44.44
         let binary: Expression = Expression::Binary(Box::new(Expression::Unary(Token {ttype: TokenType::Minus, lexeme: "-".into(), literal:None, line: 1, col: 1},
                                                                                Box::new(Expression::LiteralExpression(Literal::Number(12.34))))),
                                                     Token {ttype: TokenType::Plus, lexeme: "+".into(), literal: None, line: 1, col: 6},
                                                     Box::new(Expression::Grouping(Box::new(Expression::LiteralExpression(Literal::Number(56.78))))));
-        Interpreter::new().interpret(vec![Statement::Expression(binary)]);
+        Interpreter::new().interpret(vec![Statement::Expression(binary)])?;
         // assert_eq!(format!("{}", result), format!("{}", Value::Number(44.44)));
+        Ok(())
     }
 
     #[test]
-    fn ast_test2() {
+    fn ast_test2() -> Result<()>  {
         //-11.22 == (-11.22)  --->> true
         let binary: Expression = Expression::Binary(Box::new(Expression::Unary(Token {ttype: TokenType::Minus, lexeme: "-".into(), literal:None, line: 2, col: 1},
                                                                                Box::new(Expression::LiteralExpression(Literal::Number(11.22))))),
                                                     Token {ttype: TokenType::EqualEqual, lexeme: "==".into(), literal: None, line: 2, col: 8},
                                                     Box::new(Expression::Grouping(Box::new(Expression::LiteralExpression(Literal::Number(-11.22))))));
-        Interpreter::new().interpret(vec![Statement::Expression(binary)]);
+        Interpreter::new().interpret(vec![Statement::Expression(binary)])?;
         // assert_eq!(format!("{}", result), format!("{}", Value::Bool(true)));
+        Ok(())
     }
 }

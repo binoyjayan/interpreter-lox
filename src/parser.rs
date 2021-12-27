@@ -50,8 +50,8 @@ impl Parser {
     }
 
     // Variable declarations are statements, but they are different
-    // from other statements in the sense that the variable declarations
-    // cannot be single statements. i.e. the following is not valid:
+    // from other statements in the sense that they cannot be single
+    // statements. i.e. the following is not valid:
     // if (condition) var myvar = "myvalue";
     fn declaration(&mut self) -> Result<Statement> {
         if self.matches(&[TokenType::Var]) {
@@ -69,6 +69,10 @@ impl Parser {
         }
     }
 
+    // A variable statement doesn’t just define a new variable,
+    // it can also be used to redefine an existing variable.
+    // This helps the development in a REPL session in not having
+    // to mentally track which variables are already defined.
     fn var_declaration(&mut self) -> Result<Statement> {
         let name = self.consume(&TokenType::Identifier, "Expect variable name.")?;
         let initializer = if self.matches(&[TokenType::Equal]) {
@@ -84,6 +88,10 @@ impl Parser {
     fn statement(&mut self) -> Result<Statement> {
         if self.matches(&[TokenType::Print]) {
             self.print_statement()
+        } else if self.matches(&[TokenType::LeftBrace]) {
+            self.block_statement()
+        } else if self.matches(&[TokenType::If]) {
+            self.if_statement()
         } else {
             self.expression_statement()
         }
@@ -95,6 +103,41 @@ impl Parser {
         Ok(Statement::Print(value))
     }
 
+    // A block is a (possibly empty) series of statements or declarations
+    // surrounded by curly braces and can appear anywhere a statement is allowed.
+    fn block_statement(&mut self) -> Result<Statement> {
+        let mut statements = Vec::new();
+
+        while !self.is_at_end() && !self.check(&TokenType::RightBrace) {
+            if let Ok(statement) = self.declaration() {
+                statements.push(statement);
+            }
+        }
+        self.consume(&TokenType::RightBrace, "Expect '}' after block.")?;
+        Ok(Statement::Block(statements))
+    }
+
+    // the parser recognizes an if statement by the leading if keyword.
+    fn if_statement(&mut self) -> Result<Statement> {
+        self.consume(&TokenType::LeftParen, "Expect '(' after 'if'.")?;
+        // expression that is evaluated
+        let condition = self.expression()?;
+        self.consume(&TokenType::RightParen, "Expect ')' after if condition.")?;
+        let then_branch = self.statement()?;
+        // Solving dangling else problem in case of inner and outer if statements
+        // but with only one else statement. If that happens, eagerly look for an
+        // else before returning, the innermost call to a nested series will claim
+        // the else clause for itself before returning to the outer if statements.
+        let else_branch = if self.matches(&[TokenType::Else]) {
+            self.statement().ok()
+        } else {
+            // If there is no else branch, the else_branch field in the syntax tree is None
+            None
+        };
+        Ok(Statement::If(condition, Box::new(then_branch), Box::new(else_branch)))
+    }
+
+    // This is an expression followed by a semicolon
     fn expression_statement(&mut self) -> Result<Statement> {
         let expr = self.expression()?;
         self.consume(&TokenType::Semicolon, "Expect ';' after expression.")?;
@@ -103,7 +146,41 @@ impl Parser {
 
     // The first rule, expression, simply expands to the assignment rule
     fn expression(&mut self) -> Result<Expression> {
-        self.equality()
+        self.assignment()
+    }
+
+    // The assignment expression is unique in the sense that it
+    // has an l-value unlike only r-value for other expressions.
+    // An l-value refers to a storage location that can be assigned to.
+    // The syntax tree should reflect that an l-value isn’t evaluated
+    // like a normal expression. Because of that, the node 'Expression::Assign'
+    // has a 'Token' for the left-hand side, and not of type 'Expression'.
+    // But the parser doesn’t know it’s parsing an l-value until it encounters
+    // an '=' operator. In a complex l-value, that can occur many tokens later.
+    // e.g. func().b.c = value;
+    // The parsing looks similar to that of the other binary operators like +.
+    // The the lhs is parsed, which can be any expression of higher precedence.
+    // If a '=' is found, parse the rhs and then wrap it all up in an assignment
+    // expression tree node.
+    fn assignment(&mut self) -> Result<Expression> {
+        let expr = self.equality()?;
+
+        // match and consume the assignment operator '='
+        if self.matches(&[TokenType::Equal]) {
+            let equals = self.previous();
+            // Since assignment is right-associative, recursively call assignment()
+            // to parse the right-hand side.
+            let value = self.assignment()?;
+            // Verify that the type of the assignment target is a variable
+            if let Expression::Variable(name) = expr {
+                Ok(Expression::Assign(name, Box::new(value)))
+            } else {
+                crate::error_at_token(&self.peek(), "Invalid assignment target");
+                Err(anyhow!("Parse error"))
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn equality(&mut self) -> Result<Expression> {

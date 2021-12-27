@@ -1,5 +1,6 @@
 use std::{env};
 use std::sync::atomic;
+use anyhow::Result;
 
 mod expr;
 mod stmt;
@@ -19,40 +20,38 @@ use crate::interpreter::Interpreter;
 
 static HAD_ERROR: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
-fn main() {
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() == 2 {
-        run_file(&args[1]);
+        run_file(&args[1])?;
     } else if args.len() == 1 {
-        run_prompt();
+        run_prompt()?;
     } else {
         println!("Usage: {} <lox-script>", args[0]);
         std::process::exit(1);
     }
+    Ok(())
 }
 
-pub fn run_prompt() {
+pub fn run_prompt() -> Result<()> {
     loop {
         let mut rl = rustyline::Editor::<()>::new();
         let readline = rl.readline(">> ");
         match readline {
-            Ok(line) => run(line),
+            Ok(line) => run(line)?,
             Err(_) => {
                 println!("Exit");
                 break;
             }
         }
     }
+    Ok(())
 }
 
-pub fn run_file(filename: &str) {
-    match std::fs::read_to_string(filename) {
-        Ok(v) => run(v),
-        Err(e) => return {
-            println!("Failed to read file {} - {}", filename, e)
-        },
-    }
+pub fn run_file(filename: &str) -> Result<()> {
+    let s = std::fs::read_to_string(filename)?;
+    run(s)
 }
 pub fn print_tokens(tokens: &Vec<Token>) {
     for token in tokens {
@@ -60,12 +59,12 @@ pub fn print_tokens(tokens: &Vec<Token>) {
     }
 }
 
-pub fn run(source: String) {
+pub fn run(source: String) -> Result<()> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
     // print_tokens(&tokens);
     let statements = Parser::new(tokens).parse();
-    Interpreter::new().interpret(statements);
+    Interpreter::new().interpret(statements)
 }
 
 pub fn error(line: usize, col: usize, message: &str) {
