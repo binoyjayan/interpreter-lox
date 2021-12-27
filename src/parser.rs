@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 
+use crate::stmt::{Statement};
+use crate::expr::{Expression};
 use crate::token::{Literal, Token, TokenType};
-use crate::expr::{Expression, Statement};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -37,12 +38,67 @@ impl Parser {
         Self { tokens, current: 0}
     }
 
-    pub fn parse(&mut self) -> Vec<Expression> {
-        let mut expression = Vec::new();
-        if let Ok(expr) = self.expression() {
-            expression.push(expr);
+    pub fn parse(&mut self) -> Vec<Statement> {
+        let mut statements = Vec::new();
+
+        while !self.is_at_end() {
+            if let Ok(statement) = self.declaration() {
+                statements.push(statement);
+            }
         }
-        expression
+        statements
+    }
+
+    // Variable declarations are statements, but they are different
+    // from other statements in the sense that the variable declarations
+    // cannot be single statements. i.e. the following is not valid:
+    // if (condition) var myvar = "myvalue";
+    fn declaration(&mut self) -> Result<Statement> {
+        if self.matches(&[TokenType::Var]) {
+            if let Ok(statement) = self.var_declaration() {
+                Ok(statement)
+            } else {
+                self.synchronize();
+                Err(anyhow!("Error in declaration"))
+            }
+        } else if let Ok(statement) = self.statement() {
+            Ok(statement)
+        } else {
+            self.synchronize();
+            Err(anyhow!("Error in declaration"))
+        }
+    }
+
+    fn var_declaration(&mut self) -> Result<Statement> {
+        let name = self.consume(&TokenType::Identifier, "Expect variable name.")?;
+        let initializer = if self.matches(&[TokenType::Equal]) {
+            self.expression().ok()
+        } else {
+            // No initializer - default value for variable is None
+            None
+        };
+        self.consume(&TokenType::Semicolon, "Expect ';' after variable declaration.")?;
+        Ok(Statement::Var(name, initializer))
+    }
+
+    fn statement(&mut self) -> Result<Statement> {
+        if self.matches(&[TokenType::Print]) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Statement> {
+        let value = self.expression()?;
+        self.consume(&TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Statement::Print(value))
+    }
+
+    fn expression_statement(&mut self) -> Result<Statement> {
+        let expr = self.expression()?;
+        self.consume(&TokenType::Semicolon, "Expect ';' after expression.")?;
+        Ok(Statement::Expression(expr))
     }
 
     // The first rule, expression, simply expands to the assignment rule

@@ -2,10 +2,12 @@ use std::{env};
 use std::sync::atomic;
 
 mod expr;
+mod stmt;
 mod token;
 mod value;
 mod parser;
 mod scanner;
+mod environment;
 mod interpreter;
 mod ast_printer;
 
@@ -62,11 +64,8 @@ pub fn run(source: String) {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
     // print_tokens(&tokens);
-    let expressions = Parser::new(tokens).parse();
-    for expr in expressions {
-        let result = Interpreter::default().interpret(expr);
-        println!("Result: {}", result);
-    }
+    let statements = Parser::new(tokens).parse();
+    Interpreter::new().interpret(statements);
 }
 
 pub fn error(line: usize, col: usize, message: &str) {
