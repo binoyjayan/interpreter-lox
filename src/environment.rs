@@ -10,7 +10,7 @@ pub struct Environment {
     // The top level environment will have a value of None.
     // To find the value of a variable, start from the inner most
     // block and walk up the chain until the global scope is reached.
-    enclosing: Option<Box<Environment>>,
+    pub enclosing: Option<Box<Environment>>,
     values: HashMap<String, Value>,
 }
 
@@ -32,12 +32,11 @@ impl Environment {
     // Get the value for an variable with the name 'name'
     pub fn get(&self, name: &Token) -> Result<Value> {
         if self.values.contains_key(&name.lexeme) {
-            Ok(self.values.get(&name.lexeme).unwrap().clone())
-        } else if self.enclosing.is_some() {
-            // Check the next outer or enclosing scope
-            self.enclosing.clone().unwrap().get(name)
-        }else {
-            Err(anyhow!(format!("Undefined variable '{}'.", name.lexeme)))
+            return Ok(self.values.get(&name.lexeme).unwrap().clone())
+        }
+        match &self.enclosing {
+            Some(enclosing) => enclosing.get(name),
+            None => Err(anyhow!(format!("Undefined variable '{}'.", name.lexeme))),
         }
     }
 
@@ -47,14 +46,11 @@ impl Environment {
         // If present, assign value to that variable
         if self.values.contains_key(&name.lexeme) {
             self.values.insert(name.lexeme, value);
-            Ok(())
-        } else if self.enclosing.is_some() {
-            // Check the next outer or enclosing scope
-            let enclosing = self.enclosing.clone();
-            enclosing.unwrap().put(name, value)
-        } else {
-            Err(anyhow!(format!("Undefined variable '{}'.", name.lexeme)))
+            return Ok(())
+        }
+        match &mut self.enclosing {
+            Some(enclosing) => enclosing.put(name, value),
+            None => Err(anyhow!(format!("Undefined variable '{}'.", name.lexeme))),
         }
     }
-
 }

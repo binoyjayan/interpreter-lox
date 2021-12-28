@@ -58,14 +58,15 @@ impl Interpreter {
         // The environment field in 'self' keeps changing when the scope changes.
         // It represents the current environment. That’s the environment that
         // corresponds to the innermost scope containing the code to be executed.
-        let previous = self.environment.clone();
         self.environment = Environment::new_from(self.environment.clone());
         for statement in statements {
             self.execute(statement.clone())?;
         }
         // restores the previous value while exiting the scope or
         // if any of the statements in the block results in an error
-        self.environment = previous;
+        if let Some(enclosing) = self.environment.enclosing.clone() {
+            self.environment = *enclosing;
+        }
         Ok(Value::Nil)
     }
 }
@@ -110,6 +111,9 @@ impl StatementVisitor<Value> for Interpreter {
     }
 
     fn exec_while(&mut self, condition: Expression, body: Box<Statement>) -> Result<Value> {
+        while Self::is_truthy(&self.evaluate(condition.clone())?) {
+            self.execute(*body.clone())?;
+        }
         Ok(Value::Nil)
     }
 }
@@ -213,8 +217,22 @@ impl ExpressionVisitor<Value> for Interpreter {
         Ok(literal.into())
     }
 
+    // Here, the left operand is evaluated first.Look at its value to see if it
+    // forms a short-circuit. If not, and only then, the right operand is evaluated.
     fn eval_logical(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> Result<Value> {
-        Ok(Value::Bool(false))
+        let left = self.evaluate(*left)?;
+        if operator.ttype == TokenType::Or {
+            if Self::is_truthy(&left) {
+                // if lhs of an 'or' expresssion is true, not need to evaluate 'rhs'
+                return Ok(left);
+            }
+        } else {
+            // if lhs of an 'and' expresssion is false, not need to evaluate 'rhs'
+            if !Self::is_truthy(&left) {
+                return Ok(left);
+            }
+        }
+        return Ok(self.evaluate(*right)?);
     }
 
     // unary expressions have a single subexpression must be evaluated first

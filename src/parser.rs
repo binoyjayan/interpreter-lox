@@ -9,7 +9,7 @@ pub struct Parser {
     current: usize,
 }
 
-// Grammar:
+// Grammar for expressions:
 
 // When the first symbol in the body of the rule is the same as
 // the head of the rule means that the production is left-recursive
@@ -86,35 +86,17 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Statement> {
-        if self.matches(&[TokenType::Print]) {
+        if self.matches(&[TokenType::If]) {
+            self.if_statement()
+        } else if self.matches(&[TokenType::Print]) {
             self.print_statement()
+        } else if self.matches(&[TokenType::While]) {
+            self.while_statement()
         } else if self.matches(&[TokenType::LeftBrace]) {
             self.block_statement()
-        } else if self.matches(&[TokenType::If]) {
-            self.if_statement()
         } else {
             self.expression_statement()
         }
-    }
-
-    fn print_statement(&mut self) -> Result<Statement> {
-        let value = self.expression()?;
-        self.consume(&TokenType::Semicolon, "Expect ';' after value.")?;
-        Ok(Statement::Print(value))
-    }
-
-    // A block is a (possibly empty) series of statements or declarations
-    // surrounded by curly braces and can appear anywhere a statement is allowed.
-    fn block_statement(&mut self) -> Result<Statement> {
-        let mut statements = Vec::new();
-
-        while !self.is_at_end() && !self.check(&TokenType::RightBrace) {
-            if let Ok(statement) = self.declaration() {
-                statements.push(statement);
-            }
-        }
-        self.consume(&TokenType::RightBrace, "Expect '}' after block.")?;
-        Ok(Statement::Block(statements))
     }
 
     // the parser recognizes an if statement by the leading if keyword.
@@ -135,6 +117,34 @@ impl Parser {
             None
         };
         Ok(Statement::If(condition, Box::new(then_branch), Box::new(else_branch)))
+    }
+    
+    fn print_statement(&mut self) -> Result<Statement> {
+        let value = self.expression()?;
+        self.consume(&TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Statement::Print(value))
+    }
+
+    fn while_statement(&mut self) -> Result<Statement> {
+        self.consume(&TokenType::LeftParen, "Expect '(' after a while statement.")?;
+        let condition = self.expression()?;
+        self.consume(&TokenType::RightParen, "Expect ')' after a condition.")?;
+        let body = self.statement()?;
+        Ok(Statement::While(condition, Box::new(body)))
+    }
+
+    // A block is a (possibly empty) series of statements or declarations
+    // surrounded by curly braces and can appear anywhere a statement is allowed.
+    fn block_statement(&mut self) -> Result<Statement> {
+        let mut statements = Vec::new();
+
+        while !self.is_at_end() && !self.check(&TokenType::RightBrace) {
+            if let Ok(statement) = self.declaration() {
+                statements.push(statement);
+            }
+        }
+        self.consume(&TokenType::RightBrace, "Expect '}' after block.")?;
+        Ok(Statement::Block(statements))
     }
 
     // This is an expression followed by a semicolon
@@ -163,7 +173,7 @@ impl Parser {
     // If a '=' is found, parse the rhs and then wrap it all up in an assignment
     // expression tree node.
     fn assignment(&mut self) -> Result<Expression> {
-        let expr = self.equality()?;
+        let expr = self.logical_or()?;
 
         // match and consume the assignment operator '='
         if self.matches(&[TokenType::Equal]) {
@@ -175,12 +185,39 @@ impl Parser {
             if let Expression::Variable(name) = expr {
                 Ok(Expression::Assign(name, Box::new(value)))
             } else {
-                crate::error_at_token(&self.peek(), "Invalid assignment target");
+                crate::error_at_token(&equals, "Invalid assignment target");
                 Err(anyhow!("Parse error"))
             }
         } else {
             Ok(expr)
         }
+    }
+
+    // The logcal operators aren’t like other binary operators because
+    // they short-circuit. <condition> && expression();
+    // That is the reason why 'and' and 'or' are treated separately.
+    fn logical_or(&mut self) -> Result<Expression> {
+        let mut expr = self.logical_and()?;
+        // Parse a series of or expressions
+        while self.matches(&[TokenType::Or]) {
+            let operator = self.previous();
+            // Its operands are the next higher level of precedence, the new 'and' expression.
+            let right = self.logical_and()?;
+            expr = Expression::LogicalExpression(Box::new(expr), operator, Box::new(right));
+        }
+        Ok(expr)
+    }
+
+    fn logical_and(&mut self) -> Result<Expression> {
+        let mut expr = self.equality()?;
+        // Parse a series of and expressions
+        while self.matches(&[TokenType::And]) {
+            let operator = self.previous();
+            // call equality as the next higher level of precedence
+            let right = self.equality()?;
+            expr = Expression::LogicalExpression(Box::new(expr), operator, Box::new(right));
+        }
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result<Expression> {
