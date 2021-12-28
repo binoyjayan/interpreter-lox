@@ -86,7 +86,9 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Statement> {
-        if self.matches(&[TokenType::If]) {
+        if self.matches(&[TokenType::For]) {
+            self.for_statement()
+        } else if self.matches(&[TokenType::If]) {
             self.if_statement()
         } else if self.matches(&[TokenType::Print]) {
             self.print_statement()
@@ -97,6 +99,62 @@ impl Parser {
         } else {
             self.expression_statement()
         }
+    }
+
+    // For loops are implemented by reducing it to a while loop by a process
+    // called syntactic desugaring. For example, the following for loop may be
+    // reduced to a while loop and the interpreter does not have to know about it.
+    // for (initializer; condition; step) { block_stmt }
+    // { initializer; while(condition) { block_stmt; step; } }
+    // Note that the while loop itself is now part of a block statement
+
+    fn for_statement(&mut self) -> Result<Statement> {
+        self.consume(&TokenType::LeftParen, "Expect '(' after 'for'.")?;
+
+        // parse for loop initializer (before first semicolon)
+        let initializer = if self.matches(&[TokenType::Semicolon]) {
+            None
+        } else if self.matches(&[TokenType::Var]) {
+            // if it also has a variable declaration
+            self.var_declaration().ok()
+        } else {
+            self.expression_statement().ok()
+        };
+
+        // parse for loop condition
+        let condition = if self.check(&TokenType::Semicolon) {
+            // If not condition, the it is assumed to be 'true'
+            Expression::LiteralExpression(Literal::Bool(true))
+        } else {
+            self.expression()?
+        };
+        self.consume(&TokenType::Semicolon, "Expect ';' after a for loop condition.")?;
+
+        // parse for loop step
+        let step = if self.check(&TokenType::RightParen) {
+            None
+        } else {
+            self.expression().ok()
+        };
+        self.consume(&TokenType::RightParen, "Expect ')' after a for loop step.")?;
+
+        // parse for loop body
+        let mut body = self.statement()?;
+        // If a step was mentioned, add it to the for loops body as the last statement.
+        if let Some(step) = step {
+            // this is the body of the while loop
+            body = Statement::Block(vec![body, Statement::Expression(step)]);
+        }
+        // Now, wrap it in a while statement for the interpreter to consume
+        let mut while_stmt = Statement::While(condition, Box::new(body));
+
+        // if there is an initializer, then the 'while' statement itself will
+        // be wrapped with a block statement that has the initializer as the first
+        // statement and the while loop as the next.
+        if let Some(initializer) = initializer {
+            while_stmt = Statement::Block(vec![initializer, while_stmt]);
+        }
+        Ok(while_stmt)
     }
 
     // the parser recognizes an if statement by the leading if keyword.
@@ -128,7 +186,7 @@ impl Parser {
     fn while_statement(&mut self) -> Result<Statement> {
         self.consume(&TokenType::LeftParen, "Expect '(' after a while statement.")?;
         let condition = self.expression()?;
-        self.consume(&TokenType::RightParen, "Expect ')' after a condition.")?;
+        self.consume(&TokenType::RightParen, "Expect ')' after a while condition.")?;
         let body = self.statement()?;
         Ok(Statement::While(condition, Box::new(body)))
     }

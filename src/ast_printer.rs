@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::token::{Literal, Token, TokenType};
+use crate::token::{Literal, Token};
 use crate::expr::{Expression, ExpressionVisitor};
 
 // Test AST Printer Vistor implementation - not part of interpreter
@@ -46,6 +46,7 @@ impl ExpressionVisitor<String> for AstPrinter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::token::TokenType;
     #[test]
     fn ast_test1() -> Result<()> {
         //-123 * (45.67)   -->>    (* (- 123) (group 45.67))
