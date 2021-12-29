@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 
 use crate::stmt::{Statement};
 use crate::expr::{Expression};
+use crate::function::MAX_ARITY;
 use crate::token::{Literal, Token, TokenType};
 
 pub struct Parser {
@@ -59,7 +60,14 @@ impl Parser {
                 Ok(statement)
             } else {
                 self.synchronize();
-                Err(anyhow!("Error in declaration"))
+                Err(anyhow!("Error in variable declaration"))
+            }
+        } else if self.matches(&[TokenType::Fun]) {
+            if let Ok(statement) = self.fun_declaration("function".into()) {
+                Ok(statement)
+            } else {
+                self.synchronize();
+                Err(anyhow!("Error in function declaration"))
             }
         } else if let Ok(statement) = self.statement() {
             Ok(statement)
@@ -85,6 +93,39 @@ impl Parser {
         Ok(Statement::Var(name, initializer))
     }
 
+    // A function declaration statement is the fun keyword followed by a
+    // function name, parameters, and function body. This method is also
+    // used for parsing class methods. The 'kind' is used to differentiate
+    // between functions and methods.
+    fn fun_declaration(&mut self, kind: String) -> Result<Statement> {
+        let name = self.consume(&TokenType::Identifier, &format!("Expect {} name.", kind))?;
+        self.consume(&TokenType::LeftParen, &format!("Expect '(' after {} name.", kind))?;
+        let mut parameters = Vec::new();
+        // If the first token after '(' is ')' then there are no parameters
+        if !self.check(&TokenType::RightParen) {
+            while !self.is_at_end() {
+                if parameters.len() >= MAX_ARITY {
+                    crate::error_at_token(&self.peek(), &format!("Can't have more than {} parameters", MAX_ARITY));
+                }
+
+                let param = self.consume(&TokenType::Identifier, "Expect a parameter name.")?;
+                parameters.push(param);
+                if !self.matches(&[TokenType::Comma]) {
+                    // end of parameters list
+                    break;
+                }
+            }
+            self.consume(&TokenType::RightParen, &format!("Expect ')' after {} parameters.", kind))?;
+        }
+        // Parse function body which a block statement
+        // Note that the token '{' is consumed at the beginning of the body
+        // before calling block_statement(). That’s because block_statement()
+        // assumes that the brace token has already been matched.
+        self.consume(&TokenType::LeftBrace, &format!("Expect '{{' for {} body.", kind))?;
+        let body = self.block_statement()?;
+        Ok(Statement::Fun(name, parameters, Box::new(body)))
+    }
+
     fn statement(&mut self) -> Result<Statement> {
         if self.matches(&[TokenType::For]) {
             self.for_statement()
@@ -92,6 +133,8 @@ impl Parser {
             self.if_statement()
         } else if self.matches(&[TokenType::Print]) {
             self.print_statement()
+        } else if self.matches(&[TokenType::Return]) {
+            self.return_statement()
         } else if self.matches(&[TokenType::While]) {
             self.while_statement()
         } else if self.matches(&[TokenType::LeftBrace]) {
@@ -183,6 +226,16 @@ impl Parser {
         Ok(Statement::Print(value))
     }
 
+    fn return_statement(&mut self) -> Result<Statement> {
+        if !self.check(&TokenType::Semicolon) {
+            let value = self.expression()?;
+            self.consume(&TokenType::Semicolon, "Expect ';' after value.")?;
+            Ok(Statement::Return(Some(value)))
+        } else {
+            Ok(Statement::Return(None))
+        }
+    }
+
     fn while_statement(&mut self) -> Result<Statement> {
         self.consume(&TokenType::LeftParen, "Expect '(' after a while statement.")?;
         let condition = self.expression()?;
@@ -193,6 +246,7 @@ impl Parser {
 
     // A block is a (possibly empty) series of statements or declarations
     // surrounded by curly braces and can appear anywhere a statement is allowed.
+    // Note that the token '{' is already consumed when this function is called.
     fn block_statement(&mut self) -> Result<Statement> {
         let mut statements = Vec::new();
 
@@ -344,7 +398,44 @@ impl Parser {
             let right = self.unary()?;
             return Ok(Expression::Unary(operator, Box::new(right)))
         }
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expression> {
+        // the callee itself is not the function name but is an expression
+        // that evaluates to a function name
+        let mut expr = self.primary()?;
+
+        // Each time a '(' is seen call finish_call() to parse the
+        // call expression using the previously parsed expression
+        // as the callee. The returned expression becomes the new
+        // expr and loop to see if the result is itself called.
+        while self.matches(&[TokenType::LeftParen]) {
+            expr = self.finish_call(expr)?;
+        }
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expression) -> Result<Expression> {
+        let mut arguments = Vec::new();
+
+        // If the first token after '(' is ')' then there are no arguments
+        if !self.check(&TokenType::RightParen) {
+            while !self.is_at_end() {
+                if arguments.len() >= MAX_ARITY {
+                    crate::error_at_token(&self.peek(), &format!("Can't have more than {} parameters", MAX_ARITY));
+                }
+                if let Ok(expression) = self.expression() {
+                    arguments.push(expression);
+                }
+                if !self.matches(&[TokenType::Comma]) {
+                    // end of arguments list
+                    break;
+                }
+            }
+        }
+        self.consume(&TokenType::RightParen, "Expect `)` after arguments")?;
+        Ok(Expression::Call(Box::new(callee), arguments))
     }
 
     // Reached highest level of precedence after crawling up the

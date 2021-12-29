@@ -1,44 +1,50 @@
-use anyhow::Result;
+use std::result;
+use anyhow::Error;
 
 use crate::token::{Literal, Token};
 use crate::expr::{Expression, ExpressionVisitor};
+use crate::value::ErrorType;
 
 // Test AST Printer Vistor implementation - not part of interpreter
 #[derive(Default)]
 pub struct AstPrinter { }
 
 impl AstPrinter {
-    pub fn print(&mut self, expression: Expression) -> Result<String> {
+    pub fn print(&mut self, expression: Expression) -> result::Result<String, ErrorType> {
         self.evaluate(expression)
     }
 }
 
-impl ExpressionVisitor<String> for AstPrinter {
-    fn eval_assign(&mut self, name: Token, value: Box<Expression>) -> Result<String> {
+impl ExpressionVisitor<String, ErrorType> for AstPrinter {
+    fn eval_assign(&mut self, name: Token, value: Box<Expression>) -> result::Result<String, ErrorType> {
         Ok(format!("{} = {}", name.lexeme, self.evaluate(*value)?).into())
     }
 
-    fn eval_binary(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> Result<String> {
+    fn eval_binary(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> result::Result<String, ErrorType> {
         Ok(format!("({} {} {})", self.evaluate(*left)?, operator.lexeme, self.evaluate(*right)?))
     }
 
-    fn eval_grouping(&mut self, expr: Box<Expression>) -> Result<String> {
+    fn eval_grouping(&mut self, expr: Box<Expression>) -> result::Result<String, ErrorType> {
         Ok(format!("(group {})", self.evaluate(*expr)?))
     }
 
-    fn eval_literal(&mut self, literal: Literal) -> Result<String> {
+    fn eval_literal(&mut self, literal: Literal) -> result::Result<String, ErrorType> {
         Ok(format!("{}", literal))
     }
 
-    fn eval_logical(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> Result<String> {
+    fn eval_logical(&mut self, left: Box<Expression>, operator: Token, right: Box<Expression>) -> result::Result<String, ErrorType> {
         Ok(format!("({} {} {})", self.evaluate(*left)?, operator.lexeme, self.evaluate(*right)?))
     }
 
-    fn eval_unary(&mut self, operator: Token, value: Box<Expression>) -> Result<String> {
+    fn eval_unary(&mut self, operator: Token, value: Box<Expression>) -> result::Result<String, ErrorType> {
         Ok(format!("({} {})", operator.lexeme, self.evaluate(*value)?))
     }
 
-    fn eval_variable(&self, _expr: Token) -> Result<String> {
+    fn eval_call(&mut self, _expr: Box<Expression>, _args: Vec<Expression>) -> result::Result<String, ErrorType> {
+        Ok("".into())
+    }
+
+    fn eval_variable(&self, _expr: Token) -> result::Result<String, ErrorType> {
         Ok("".into())
     }
 }

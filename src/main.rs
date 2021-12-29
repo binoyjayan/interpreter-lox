@@ -1,6 +1,5 @@
-use std::{env};
+use std::{env, result};
 use std::sync::atomic;
-use anyhow::Result;
 
 mod expr;
 mod stmt;
@@ -8,6 +7,7 @@ mod token;
 mod value;
 mod parser;
 mod scanner;
+mod function;
 mod environment;
 mod interpreter;
 mod ast_printer;
@@ -15,12 +15,17 @@ mod ast_printer;
 use parser::Parser;
 use scanner::Scanner;
 use token::{Token, TokenType};
+use value::{Value, ErrorType};
 
 use crate::interpreter::Interpreter;
 
 static HAD_ERROR: atomic::AtomicBool = atomic::AtomicBool::new(false);
 
-fn main() -> Result<()> {
+fn main() {
+    run_main().expect("Failed to run program");
+}
+
+fn run_main() -> result::Result<Value, ErrorType> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() == 2 {
@@ -31,35 +36,37 @@ fn main() -> Result<()> {
         println!("Usage: {} <lox-script>", args[0]);
         std::process::exit(1);
     }
-    Ok(())
+    Ok(Value::Nil)
 }
 
-pub fn run_prompt() -> Result<()> {
+pub fn run_prompt() -> result::Result<Value, ErrorType> {
     loop {
         let mut rl = rustyline::Editor::<()>::new();
         let readline = rl.readline(">> ");
         match readline {
-            Ok(line) => run(line)?,
+            Ok(line) => {
+                run(line)?
+            },
             Err(_) => {
                 println!("Exit");
                 break;
             }
-        }
+        };
     }
-    Ok(())
+    Ok(Value::Nil)
 }
 
-pub fn run_file(filename: &str) -> Result<()> {
-    let s = std::fs::read_to_string(filename)?;
-    run(s)
+pub fn run_file(filename: &str) -> result::Result<Value, ErrorType> {
+    run(std::fs::read_to_string(filename)?)
 }
+
 pub fn print_tokens(tokens: &Vec<Token>) {
     for token in tokens {
         println!("{:?}", token);
     }
 }
 
-pub fn run(source: String) -> Result<()> {
+pub fn run(source: String) -> result::Result<Value, ErrorType> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens();
     // print_tokens(&tokens);
